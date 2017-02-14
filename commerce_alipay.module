@@ -320,6 +320,7 @@ function commerce_alipay_notify_submit($order, $payment_method, $notify) {
         if ($notify['exterface']!= "create_direct_pay_by_user") {
           commerce_order_status_update($order, 'completed');
         }
+        commerce_checkout_complete($order);
         break;
 
       // Transaction successful.
@@ -330,6 +331,7 @@ function commerce_alipay_notify_submit($order, $payment_method, $notify) {
         if ($notify['exterface']!= "create_direct_pay_by_user") {
           commerce_order_status_update($order, 'completed');
         }
+        commerce_checkout_complete($order);
         break;
     }
   }

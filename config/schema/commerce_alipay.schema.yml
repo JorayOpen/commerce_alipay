@@ -10,12 +10,6 @@ commerce_payment.commerce_payment_gateway.plugin.alipay_customer_scan_qrcode_pay
     public_key:
       type: string
       label: 'public_key'
-    private_key_uri:
-      type: string
-      label: 'private_key_uri'
-    public_key_uri:
-      type: string
-      label: 'public_key_uri'
 
 commerce_payment.commerce_payment_gateway.plugin.micropay:
   type: commerce_payment_gateway_configuration

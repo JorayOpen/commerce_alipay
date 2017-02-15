@@ -25,8 +25,8 @@ class QRCodePaymentForm extends BasePaymentOffsiteForm {
     /** @var \Drupal\commerce_payment\Plugin\Commerce\PaymentGateway\OffsitePaymentGatewayInterface $payment_gateway_plugin */
     $payment_gateway_plugin = $payment->getPaymentGateway()->getPlugin();
     $app_id = $payment_gateway_plugin->getConfiguration()['app_id'];
-    $public_key_path = drupal_realpath(CustomerScanQRCodePay::KEY_URI_PREFIX . $payment_gateway_plugin->getConfiguration()['public_key_uri']);
-    $private_key_path = drupal_realpath(CustomerScanQRCodePay::KEY_URI_PREFIX . $payment_gateway_plugin->getConfiguration()['private_key_uri']);
+    $private_key = $payment_gateway_plugin->getConfiguration()['private_key'];
+    $public_key = $payment_gateway_plugin->getConfiguration()['public_key'];
     $order = $payment->getOrder();
 
     /** @var \Omnipay\Alipay\AopF2FGateway $gateway */
@@ -36,8 +36,8 @@ class QRCodePaymentForm extends BasePaymentOffsiteForm {
     }
     $gateway->setAppId($app_id);
     $gateway->setSignType('RSA2');
-    $gateway->setPrivateKey($private_key_path);
-    $gateway->setAlipayPublicKey($public_key_path);
+    $gateway->setPrivateKey($private_key);
+    $gateway->setAlipayPublicKey($public_key);
     $gateway->setNotifyUrl($payment_gateway_plugin->getNotifyUrl()->toString());
 
     $request = $gateway->purchase();

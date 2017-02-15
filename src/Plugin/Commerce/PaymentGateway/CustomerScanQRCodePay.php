@@ -25,8 +25,6 @@ use Omnipay\Omnipay;
  */
 class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements SupportsRefundsInterface{
 
-  const KEY_URI_PREFIX = 'private://commerce_alipay/';
-
   /**
    * {@inheritdoc}
    */
@@ -34,9 +32,7 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
     return [
         'app_id' => '',
         'public_key' => '',
-        'private_key' => '',
-        'public_key_uri' => '',
-        'private_key_uri' => ''
+        'private_key' => ''
       ] + parent::defaultConfiguration();
   }
 
@@ -69,72 +65,7 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
       '#required' => TRUE,
     ];
 
-    $form['public_key_uri'] = [
-      '#type' => 'hidden',
-      '#default_value' => $this->configuration['public_key_uri']
-    ];
-
-    $form['private_key_uri'] = [
-      '#type' => 'hidden',
-      '#default_value' => $this->configuration['private_key_uri']
-    ];
-
     return $form;
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function validateConfigurationForm(array &$form, FormStateInterface $form_state) {
-
-    $values = $form_state->getValue($form['#parents']);
-    if (!empty($values['public_key'])) {
-      // Check the file directory for storing cert/key files
-      $path = self::KEY_URI_PREFIX;
-      $dir = file_prepare_directory($path, FILE_CREATE_DIRECTORY);
-      if (!$dir) {
-        $form_state->setError($form['public_key'], $this->t('Commerce Alipay Pay cannot find your private file system. Please make sure your site has private file system configured!'));
-        return;
-      }
-
-      $new_uri = $values['app_id'] . md5($values['public_key']);
-
-      if (empty($this->configuration['public_key_uri'])){
-      } else {
-        file_unmanaged_delete(self::KEY_URI_PREFIX . $this->configuration['public_key_uri']);
-      }
-      // We regenerate pem file in case the files were missing during server migration
-      $updated = file_unmanaged_save_data($values['public_key'], self::KEY_URI_PREFIX . $new_uri);
-      if ($updated) {
-        $values['public_key_uri'] = $new_uri;
-      } else {
-        $form_state->setError($form['public_key'], $this->t('Commerce Alipay cannot save your public key into a file. Please make sure your site has private file system configured!'));
-      }
-    }
-
-    if (!empty($values['private_key'])) {
-      // Check the file directory for storing cert/key files
-      $path = self::KEY_URI_PREFIX;
-      $dir = file_prepare_directory($path, FILE_CREATE_DIRECTORY);
-      if (!$dir) {
-        $form_state->setError($form['private_key'], $this->t('Commerce Alipay cannot find your private file system. Please make sure your site has private file system configured!'));
-        return;
-      }
-
-      $new_uri = $values['app_id'] . md5($values['private_key']);
-
-      if (empty($this->configuration['private_key_uri'])) {
-      } else {
-        file_unmanaged_delete(self::KEY_URI_PREFIX . $this->configuration['private_key_uri']);
-      }
-      // We regenerate pem file in case the files were missing during server migration
-      $updated = file_unmanaged_save_data($values['private_key'], self::KEY_URI_PREFIX . $new_uri);
-      if ($updated) {
-        $values['private_key_uri'] = $new_uri;
-      } else {
-        $form_state->setError($form['private_key'], $this->t('Commerce Alipay cannot save your private key into a file. Please make sure your site has private file system configured!'));
-      }
-    }
   }
 
   /**
@@ -147,8 +78,6 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
       $this->configuration['app_id'] = $values['app_id'];
       $this->configuration['public_key'] = $values['public_key'];
       $this->configuration['private_key'] = $values['private_key'];
-      $this->configuration['public_key_uri'] = $values['app_id'] . md5($values['public_key']);
-      $this->configuration['private_key_uri'] = $values['app_id'] . md5($values['private_key']);
     }
   }
 
@@ -232,15 +161,15 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
   public function onNotify(Request $request) {
 
     $app_id = $this->getConfiguration()['app_id'];
-    $public_key_path = drupal_realpath(self::KEY_URI_PREFIX . $this->getConfiguration()['public_key_uri']);
-    $private_key_path = drupal_realpath(self::KEY_URI_PREFIX . $this->getConfiguration()['private_key_uri']);
+    $private_key = $this->getConfiguration()['private_key'];
+    $public_key = $this->getConfiguration()['public_key'];
 
     /** @var \Omnipay\Alipay\AopF2FGateway $gateway */
     $gateway = Omnipay::create('Alipay_AopF2F');
     $gateway->setAppId($app_id);
     $gateway->setSignType('RSA2');
-    $gateway->setPrivateKey($private_key_path);
-    $gateway->setAlipayPublicKey($public_key_path);
+    $gateway->setPrivateKey($private_key);
+    $gateway->setAlipayPublicKey($public_key);
 
     $request = $gateway->completePurchase();
     $request->setParams($_POST); //Optional

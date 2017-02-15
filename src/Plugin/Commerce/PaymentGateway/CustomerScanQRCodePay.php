@@ -53,19 +53,19 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
       '#required' => TRUE,
     ];
 
+    $form['private_key'] = [
+      '#type' => 'textarea',
+      '#title' => $this->t('开发者应用私钥'),
+      '#description' => $this->t('请填写开发者私钥去头去尾去回车，一行字符串'),
+      '#default_value' => $this->configuration['private_key'],
+      '#required' => TRUE,
+    ];
+
     $form['public_key'] = [
       '#type' => 'textarea',
       '#title' => $this->t('支付宝公钥'),
       '#description' => $this->t('请填写支付宝公钥，一行字符串'),
       '#default_value' => $this->configuration['public_key'],
-      '#required' => TRUE,
-    ];
-
-    $form['private_key'] = [
-      '#type' => 'textarea',
-      '#title' => $this->t('支付宝私钥'),
-      '#description' => $this->t('请填写开发者私钥去头去尾去回车，一行字符串'),
-      '#default_value' => $this->configuration['private_key'],
       '#required' => TRUE,
     ];
 

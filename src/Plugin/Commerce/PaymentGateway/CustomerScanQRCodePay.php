@@ -5,6 +5,7 @@ namespace Drupal\commerce_alipay\Plugin\Commerce\PaymentGateway;
 use Drupal\commerce_payment\Entity\PaymentInterface;
 use Drupal\commerce_payment\Plugin\Commerce\PaymentGateway\OffsitePaymentGatewayBase;
 use Drupal\commerce_payment\Plugin\Commerce\PaymentGateway\SupportsRefundsInterface;
+use Drupal\commerce_payment\Exception\InvalidRequestException;
 use Drupal\commerce_price\Price;
 use Drupal\Core\Form\FormStateInterface;
 use Symfony\Component\HttpFoundation\Request;
@@ -52,7 +53,7 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
     $form['private_key'] = [
       '#type' => 'textarea',
       '#title' => $this->t('开发者应用私钥'),
-      '#description' => $this->t('请填写开发者私钥去头去尾去回车，一行字符串'),
+      '#description' => $this->t('应用私钥在创建订单时会使用到，需要它计算出签名供支付宝验证（应用公钥需要在支付宝开放平台中填写）'),
       '#default_value' => $this->configuration['private_key'],
       '#required' => TRUE,
     ];
@@ -60,7 +61,7 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
     $form['public_key'] = [
       '#type' => 'textarea',
       '#title' => $this->t('支付宝公钥'),
-      '#description' => $this->t('请填写支付宝公钥，一行字符串'),
+      '#description' => $this->t('支付宝公钥在同步异步通知中会使用到，它能验证请求的签名是否是支付宝的私钥所签名。（支付宝公钥需要在支付宝开放平台中获取）'),
       '#default_value' => $this->configuration['public_key'],
       '#required' => TRUE,
     ];
@@ -98,61 +99,61 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
 
     /** @var \Drupal\commerce_payment\Plugin\Commerce\PaymentGateway\OffsitePaymentGatewayInterface $payment_gateway_plugin */
     $payment_gateway_plugin = $payment->getPaymentGateway()->getPlugin();
-    $app_id = $payment_gateway_plugin->getConfiguration()['app_id'];
-    $mch_id = $payment_gateway_plugin->getConfiguration()['mch_id'];
-    $key = $payment_gateway_plugin->getConfiguration()['key'];
-    $sub_appid = $payment_gateway_plugin->getConfiguration()['appid'];
-    $sub_mch_id = $payment_gateway_plugin->getConfiguration()['mch_id'];
+    $app_id = $this->getConfiguration()['app_id'];
+    $private_key = $this->getConfiguration()['private_key'];
+    $public_key = $this->getConfiguration()['public_key'];
 
-    $cert_path = drupal_realpath(self::KEY_URI_PREFIX . $payment_gateway_plugin->getConfiguration()['certpem_uri']);
-    $key_path = drupal_realpath(self::KEY_URI_PREFIX . $payment_gateway_plugin->getConfiguration()['keypem_uri']);
-
-    if (!$cert_path || !$key_path) {
-      throw new \InvalidArgumentException(t('Could not load the apiclient_cert.pem or apiclient_key.pem files, which are required for WeChat Refund. Did you configure them?'));
+    /** @var \Omnipay\Alipay\AopF2FGateway $gateway */
+    $gateway = Omnipay::create('Alipay_AopF2F');
+    if ($payment_gateway_plugin->getMode() == 'test') {
+      $gateway->sandbox(); // set to use sandbox endpoint
     }
-    $options = [
-      // 前面的appid什么的也得保留哦
-      'app_id' => $app_id,
-      // ...
-      // payment
-      'payment' => [
-        'merchant_id'        => $mch_id,
-        'key'                => $key,
-        'cert_path'          => $cert_path, // XXX: 绝对路径！！！！
-        'key_path'           => $key_path,      // XXX: 绝对路径！！！！
-        //'notify_url'         => '默认的订单回调地址',       // 你也可以在下单时单独设置来想覆盖它
-        // 'device_info'     => '013467007045764',
-        // 'sub_app_id'      => '',
-        // 'sub_merchant_id' => '',
-        // ...
-      ],
-    ];
-    $app = new Application($options);
-    $wechat_pay = $app->payment;
+    $gateway->setAppId($app_id);
+    $gateway->setSignType('RSA2');
+    $gateway->setPrivateKey($private_key);
+    $gateway->setAlipayPublicKey($public_key);
 
-    $result = $wechat_pay->refund($payment->getOrderId(), $payment->getOrderId() . date("zHis"), floatval($payment->getOrder()->getTotalPrice()->getNumber()) * 100, floatval($amount->getNumber()) * 100);
+    /** @var \Omnipay\Alipay\Requests\AopTradeRefundRequest $request */
+    $request = $gateway->refund();
 
-    if (!$result->return_code == 'SUCCESS' || !$result->result_code == 'SUCCESS'){
-      // For any reason, we cannot get a preorder made by WeChat service
-      throw new \InvalidRequestException(t('Alipay Service cannot approve this request: ') . $result->err_code_des);
+    $request->setBizContent([
+      'out_trade_no' => strval($payment->getOrderId()),
+      'trade_no' => $payment->getRemoteId(),
+      'refund_amount' => (float) $amount->getNumber(),
+      'out_request_no' => $payment->getOrderId() . date("zHis")
+    ]);
+
+    try {
+      /** @var \Omnipay\Alipay\Responses\AopTradeRefundResponse $response */
+      $response = $request->send();
+      if($response->getAlipayResponse('code') == '10000'){
+        // Refund is successful
+        // Perform the refund request here, throw an exception if it fails.
+        // See \Drupal\commerce_payment\Exception for the available exceptions.
+        $remote_id = $payment->getRemoteId();
+        $number = $amount->getNumber();
+
+        $old_refunded_amount = $payment->getRefundedAmount();
+        $new_refunded_amount = $old_refunded_amount->add($amount);
+        if ($new_refunded_amount->lessThan($payment->getAmount())) {
+          $payment->state = 'capture_partially_refunded';
+        }
+        else {
+          $payment->state = 'capture_refunded';
+        }
+
+        $payment->setRefundedAmount($new_refunded_amount);
+        $payment->save();
+
+      } else {
+        // Refund is not successful
+        throw new InvalidRequestException(t('The refund request has failed: ') . $response->getAlipayResponse('sub_msg'));
+      }
+    } catch (\Exception $e) {
+      // Refund is not successful
+      \Drupal::logger('commerce_alipay')->error($e->getMessage());
+      throw new InvalidRequestException(t('Alipay Service cannot approve this request: ') . $response->getAlipayResponse('sub_msg'));
     }
-
-    // Perform the refund request here, throw an exception if it fails.
-    // See \Drupal\commerce_payment\Exception for the available exceptions.
-    $remote_id = $payment->getRemoteId();
-    $number = $amount->getNumber();
-
-    $old_refunded_amount = $payment->getRefundedAmount();
-    $new_refunded_amount = $old_refunded_amount->add($amount);
-    if ($new_refunded_amount->lessThan($payment->getAmount())) {
-      $payment->state = 'capture_partially_refunded';
-    }
-    else {
-      $payment->state = 'capture_refunded';
-    }
-
-    $payment->setRefundedAmount($new_refunded_amount);
-    $payment->save();
   }
 
   /**
@@ -167,40 +168,32 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
     /** @var \Omnipay\Alipay\AopF2FGateway $gateway */
     $gateway = Omnipay::create('Alipay_AopF2F');
     $gateway->setAppId($app_id);
-    $gateway->setSignType('RSA2');
     $gateway->setPrivateKey($private_key);
     $gateway->setAlipayPublicKey($public_key);
 
-    $request = $gateway->completePurchase();
-    $request->setParams($_POST); //Optional
+    /** @var \Omnipay\Alipay\Requests\AopCompletePurchaseRequest $virtual_request */
+    $virtual_request = $gateway->completePurchase();
+    $virtual_request->setParams($_POST); //Optional
 
     try {
       /** @var \Omnipay\Alipay\Responses\AopCompletePurchaseResponse $response */
-      $response = $request->send();
+      $response = $virtual_request->send();
+      $data = $response->getData();
 
-      // Payment is successful
-      if($response->isPaid()){
+      if (array_key_exists('refund_fee', $data)) {
+        die('success'); // Ingore refund notifcation
+      } elseif ($response->isPaid()) { // Payment is successful
 
-        $data = $response->getData();
         if ($this->getMode()) {
-          \Drupal::logger('commerce_alipay')->notice($data->toString());
+          \Drupal::logger('commerce_alipay')->notice(print_r($data, TRUE));
         }
 
-        $payment_storage = $this->entityTypeManager->getStorage('commerce_payment');
-        $payment = $payment_storage->create([
-          'state' => 'capture_completed',
-          'amount' => new Price(strval($data['total_amount']), 'CNY'),
-          'payment_gateway' => $this->entityId,
-          'order_id' => $data['out_trade_no'],
-          'test' => $this->getMode() == 'test',
-          'remote_id' => $data['trade_no'],
-          'remote_state' => $data['trade_status'],
-          'authorized' => REQUEST_TIME
-        ]);
-        $payment->save();
+        $this->createPayment($data);
+
         die('success'); //The response should be 'success' only
-      }else{
+      } else {
         // Payment is not successful
+        \Drupal::logger('commerce_alipay')->error(print_r($data, TRUE));
         die('fail');
       }
     } catch (\Exception $e) {
@@ -208,6 +201,35 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
       \Drupal::logger('commerce_alipay')->error($e->getMessage());
       die('fail');
     }
+  }
+
+  /**
+   * Create a Commerce Payment from a WeChat request successful result
+   * @param  array $result
+   * @param  string $state
+   * @param  OrderInterface $order
+   * @param  string $remote_state
+   */
+  public function createPayment(array $result, $state = 'capture_completed', OrderInterface $order = NULL, $remote_state = NULL) {
+    /** @var \Drupal\commerce_payment\Plugin\Commerce\PaymentGateway\OffsitePaymentGatewayInterface $payment_gateway_plugin */
+    $payment_storage = $this->entityTypeManager->getStorage('commerce_payment');
+
+    if (!$order) {
+      $price = new Price(strval($result['total_amount']), 'CNY');
+    } else {
+      $price = $order->getTotalPrice();
+    }
+    $payment = $payment_storage->create([
+      'state' => $state,
+      'amount' => $price,
+      'payment_gateway' => $this->entityId,
+      'order_id' => $result['out_trade_no']? $result['out_trade_no'] : $order->id(),
+      'test' => $this->getMode() == 'test',
+      'remote_id' => $result['trade_no'],
+      'remote_state' => $remote_state,
+      'authorized' => REQUEST_TIME
+    ]);
+    $payment->save();
   }
 
 }

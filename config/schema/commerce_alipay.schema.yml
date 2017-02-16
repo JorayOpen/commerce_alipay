@@ -11,33 +11,15 @@ commerce_payment.commerce_payment_gateway.plugin.alipay_customer_scan_qrcode_pay
       type: string
       label: 'public_key'
 
-commerce_payment.commerce_payment_gateway.plugin.micropay:
+commerce_payment.commerce_payment_gateway.plugin.alipay_business_capture_qrcode_pay:
   type: commerce_payment_gateway_configuration
   mapping:
-    appid:
+    app_id:
       type: string
-      label: 'appid'
-    mch_id:
+      label: 'app_id'
+    private_key:
       type: string
-      label: 'mch_id'
-    key:
+      label: 'private_key'
+    public_key:
       type: string
-      label: 'key'
-    sub_appid:
-      type: string
-      label: 'sub_appid'
-    sub_mch_id:
-      type: string
-      label: 'sub_mch_id'
-    certpem:
-      type: string
-      label: 'certpem'
-    keypem:
-      type: string
-      label: 'keypem'
-    certpem_uri:
-      type: string
-      label: 'certpem_uri'
-    keypem_uri:
-      type: string
-      label: 'keypem_uri'
+      label: 'public_key'

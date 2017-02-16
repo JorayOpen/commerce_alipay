@@ -4,7 +4,6 @@ namespace Drupal\commerce_alipay\PluginForm;
 
 use Drupal\commerce_payment\PluginForm\PaymentOffsiteForm as BasePaymentOffsiteForm;
 use Drupal\Core\Form\FormStateInterface;
-use Drupal\commerce_alipay\Plugin\Commerce\PaymentGateway\CustomerScanQRCodePay;
 use Omnipay\Omnipay;
 use Com\Tecnick\Barcode\Barcode;
 use Drupal\Core\Render\Markup;

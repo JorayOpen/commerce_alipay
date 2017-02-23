@@ -9,6 +9,7 @@ use Drupal\commerce_payment\Exception\InvalidRequestException;
 use Drupal\commerce_price\Price;
 use Drupal\Core\Form\FormStateInterface;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 use Omnipay\Omnipay;
 
 /**
@@ -230,6 +231,49 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
       'authorized' => REQUEST_TIME
     ]);
     $payment->save();
+  }
+
+  /**
+   *
+   * @param string $app_id
+   * @param string $private_key
+   * @param string $order_id order id
+   * @param float $total_amout total amount. Unit is Chinese Yuan.
+   * @param string $mode
+   * @return mixed|string
+   */
+  public function requestQRCode($app_id, $private_key, $order_id, $total_amout, $mode) {
+    /** @var \Omnipay\Alipay\AopF2FGateway $gateway */
+    $gateway = Omnipay::create('Alipay_AopF2F');
+    if ($mode == 'test') {
+      $gateway->sandbox(); // set to use sandbox endpoint
+    }
+    $gateway->setAppId($app_id);
+    $gateway->setSignType('RSA2');
+    $gateway->setPrivateKey($private_key);
+    $gateway->setNotifyUrl($this->getNotifyUrl()->toString());
+
+    $request = $gateway->purchase();
+    /** @var \Drupal\commerce_price\Price $price */
+    $request->setBizContent([
+      'subject'      => \Drupal::config('system.site')->get('name') . t(' Order: ') . $order_id,
+      'out_trade_no' => $order_id,
+      'total_amount' => $total_amout
+    ]);
+
+    try {
+      /** @var \Omnipay\Alipay\Responses\AopTradePreCreateResponse $response */
+      $response = $request->send();
+
+      if ($response->getAlipayResponse('code') == '10000') {  // Success
+        return $response->getQrCode();
+      } else {
+        throw new BadRequestHttpException($response->getAlipayResponse('sub_code') . ' ' .$response->getAlipayResponse('sub_msg'));
+      }
+    } catch (\Exception $e) {
+      // Request is not successful
+      \Drupal::logger('commerce_alipay')->error($e->getMessage());
+    }
   }
 
 }

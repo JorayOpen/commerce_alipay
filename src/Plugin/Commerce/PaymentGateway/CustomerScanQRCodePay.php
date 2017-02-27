@@ -27,6 +27,8 @@ use Omnipay\Omnipay;
  */
 class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements SupportsRefundsInterface{
 
+  protected $gateway_lib;
+
   /**
    * {@inheritdoc}
    */
@@ -98,21 +100,11 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
       throw new InvalidRequestException(sprintf("Can't refund more than %s.", $balance->__toString()));
     }
 
-    /** @var \Drupal\commerce_payment\Plugin\Commerce\PaymentGateway\OffsitePaymentGatewayInterface $payment_gateway_plugin */
-    $payment_gateway_plugin = $payment->getPaymentGateway()->getPlugin();
-    $app_id = $this->getConfiguration()['app_id'];
-    $private_key = $this->getConfiguration()['private_key'];
-    $public_key = $this->getConfiguration()['public_key'];
-
-    /** @var \Omnipay\Alipay\AopF2FGateway $gateway */
-    $gateway = Omnipay::create('Alipay_AopF2F');
-    if ($payment_gateway_plugin->getMode() == 'test') {
-      $gateway->sandbox(); // set to use sandbox endpoint
+    if (!$this->gateway_lib) {
+      $this->loadGatewayConfig();
     }
-    $gateway->setAppId($app_id);
-    $gateway->setSignType('RSA2');
-    $gateway->setPrivateKey($private_key);
-    $gateway->setAlipayPublicKey($public_key);
+    /** @var \Omnipay\Alipay\AopF2FGateway $gateway */
+    $gateway = $this->gateway_lib;
 
     /** @var \Omnipay\Alipay\Requests\AopTradeRefundRequest $request */
     $request = $gateway->refund();
@@ -162,15 +154,11 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
    */
   public function onNotify(Request $request) {
 
-    $app_id = $this->getConfiguration()['app_id'];
-    $private_key = $this->getConfiguration()['private_key'];
-    $public_key = $this->getConfiguration()['public_key'];
-
+    if (!$this->gateway_lib) {
+      $this->loadGatewayConfig();
+    }
     /** @var \Omnipay\Alipay\AopF2FGateway $gateway */
-    $gateway = Omnipay::create('Alipay_AopF2F');
-    $gateway->setAppId($app_id);
-    $gateway->setPrivateKey($private_key);
-    $gateway->setAlipayPublicKey($public_key);
+    $gateway = $this->gateway_lib;
 
     /** @var \Omnipay\Alipay\Requests\AopCompletePurchaseRequest $virtual_request */
     $virtual_request = $gateway->completePurchase();
@@ -242,15 +230,12 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
    * @param string $mode
    * @return mixed|string
    */
-  public function requestQRCode($app_id, $private_key, $order_id, $total_amout, $mode) {
-    /** @var \Omnipay\Alipay\AopF2FGateway $gateway */
-    $gateway = Omnipay::create('Alipay_AopF2F');
-    if ($mode == 'test') {
-      $gateway->sandbox(); // set to use sandbox endpoint
+  public function requestQRCode($order_id, $total_amout) {
+    if (!$this->gateway_lib) {
+      $this->loadGatewayConfig();
     }
-    $gateway->setAppId($app_id);
-    $gateway->setSignType('RSA2');
-    $gateway->setPrivateKey($private_key);
+    /** @var \Omnipay\Alipay\AopF2FGateway $gateway */
+    $gateway = $this->gateway_lib;
     $gateway->setNotifyUrl($this->getNotifyUrl()->toString());
 
     $request = $gateway->purchase();
@@ -274,6 +259,41 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
       // Request is not successful
       \Drupal::logger('commerce_alipay')->error($e->getMessage());
     }
+  }
+
+  /**
+   * Load configuration from parameters first, otherwise from system configuration. This method exists so other part of system can override the configurations.
+   * One use case would be multi-stores, each store has its own payment gateway configuration saved on other entity.
+   * @param null $app_id
+   * @param null $private_key
+   * @param null $public_key
+   * @param null $mode
+   * @return \Omnipay\Alipay\AopF2FGateway
+   */
+  public function loadGatewayConfig($app_id = NULL, $private_key = NULL, $public_key = NULL, $mode = NULL) {
+    if (!$app_id) {
+      $app_id = $this->getConfiguration()['app_id'];
+    }
+    if (!$private_key) {
+      $private_key = $this->getConfiguration()['private_key'];
+    }
+    if (!$public_key) {
+      $public_key = $this->getConfiguration()['public_key'];
+    }
+    if (!$mode) {
+      $mode = $this->getMode();
+    }
+
+    /** @var \Omnipay\Alipay\AopF2FGateway $gateway */
+    $gateway = Omnipay::create('Alipay_AopF2F');
+    $gateway->setAppId($app_id);
+    $gateway->setSignType('RSA2');
+    $gateway->setPrivateKey($private_key);
+    $gateway->setAlipayPublicKey($public_key);
+    if ($mode == 'test') {
+      $gateway->sandbox(); // set to use sandbox endpoint
+    }
+    $this->gateway_lib = $gateway;
   }
 
 }

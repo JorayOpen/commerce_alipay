@@ -23,14 +23,11 @@ class QRCodePaymentForm extends BasePaymentOffsiteForm {
     /** @var \Drupal\commerce_payment\Plugin\Commerce\PaymentGateway\OffsitePaymentGatewayInterface $payment_gateway_plugin */
     $payment_gateway_plugin = $payment->getPaymentGateway()->getPlugin();
 
-    $app_id = $payment_gateway_plugin->getConfiguration()['app_id'];
-    $private_key = $payment_gateway_plugin->getConfiguration()['private_key'];
-    $public_key = $payment_gateway_plugin->getConfiguration()['public_key'];
     $order = $payment->getOrder();
     $price = $payment->getAmount();
 
     try {
-      $result = $payment_gateway_plugin->requestQRCode($app_id, $private_key, $order->id(), (float) $price->getNumber(), $payment_gateway_plugin->getMode());
+      $result = $payment_gateway_plugin->requestQRCode($order->id(), (float) $price->getNumber());
 
       $barcode = new Barcode();
       // generate a barcode

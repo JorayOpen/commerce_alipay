@@ -198,6 +198,7 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
    * @param  string $state
    * @param  OrderInterface $order
    * @param  string $remote_state
+   * @return \Drupal\commerce_payment\Entity\PaymentInterface $payment
    */
   public function createPayment(array $result, $state = 'capture_completed', OrderInterface $order = NULL, $remote_state = NULL) {
     /** @var \Drupal\commerce_payment\Plugin\Commerce\PaymentGateway\OffsitePaymentGatewayInterface $payment_gateway_plugin */
@@ -219,18 +220,16 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
       'authorized' => REQUEST_TIME
     ]);
     $payment->save();
+    return $payment;
   }
 
   /**
    *
-   * @param string $app_id
-   * @param string $private_key
    * @param string $order_id order id
    * @param float $total_amout total amount. Unit is Chinese Yuan.
-   * @param string $mode
    * @return mixed|string
    */
-  public function requestQRCode($order_id, $total_amout) {
+  public function requestQRCode($order_id, $total_amount) {
     if (!$this->gateway_lib) {
       $this->loadGatewayConfig();
     }
@@ -243,7 +242,7 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
     $request->setBizContent([
       'subject'      => \Drupal::config('system.site')->get('name') . t(' Order: ') . $order_id,
       'out_trade_no' => $order_id,
-      'total_amount' => $total_amout
+      'total_amount' => $total_amount
     ]);
 
     try {
@@ -258,6 +257,56 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
     } catch (\Exception $e) {
       // Request is not successful
       \Drupal::logger('commerce_alipay')->error($e->getMessage());
+      throw new BadRequestHttpException($e->getMessage());
+    }
+  }
+
+  /**
+   * @param string $order_id
+   * @param string $auth_code
+   * @param float $total_amount
+   * @return \Drupal\Core\Entity\EntityInterface
+   */
+  public function capture($order_id, $auth_code, $total_amount) {
+    if (!$this->gateway_lib) {
+      $this->loadGatewayConfig();
+    }
+    /** @var \Omnipay\Alipay\AopF2FGateway $gateway */
+    $gateway = $this->gateway_lib;
+
+    /** @var \Omnipay\Alipay\Requests\AopTradePayRequest $request */
+    $request = $gateway->capture();
+    $request->setBizContent([
+      'out_trade_no' => (string) $order_id,
+      'scene'        => 'bar_code',
+      'auth_code'    => $auth_code,  //购买者手机上的付款二维码
+      'subject'      => \Drupal::config('system.site')->get('name') . t(' Order: ') . $order_id,
+      'total_amount' => (float) $total_amount,
+    ]);
+
+    try {
+      /** @var \Omnipay\Alipay\Responses\AopTradePayResponse $response */
+      $response = $request->send();
+
+      // TODO: need to handle AopTradeCancelResponse
+
+      if ($response->isPaid()) {
+        // Payment is successful
+        $result = $response->getAlipayResponse();
+        if ($result['code'] == '10000') {
+          $payment_entity = $this->createPayment($result);
+          return $payment_entity;
+        }
+
+      } else {
+        // Payment is not successful
+        \Drupal::logger('commerce_alipay')->error(print_r($response->getData(), TRUE));
+        throw new BadRequestHttpException($response->getAlipayResponse('sub_code') . ' ' .$response->getAlipayResponse('sub_msg'));
+      }
+    } catch (\Exception $e) {
+      // Payment is not successful
+      \Drupal::logger('commerce_alipay')->error($e->getMessage());
+      throw new BadRequestHttpException($e->getMessage());
     }
   }
 

@@ -27,13 +27,14 @@ class QRCodePaymentForm extends BasePaymentOffsiteForm {
     $price = $payment->getAmount();
 
     try {
-      $result = $payment_gateway_plugin->requestQRCode($order->id(), $price);
+      /** @var \Drupal\commerce_payment\Entity\Payment $payment_entity */
+      $payment_entity = $payment_gateway_plugin->requestQRCode($order->id(), $price);
 
       $barcode = new Barcode();
       // generate a barcode
       $bobj = $barcode->getBarcodeObj(
         'QRCODE,H',                     // barcode type and additional comma-separated parameters
-        $result,          // data string to encode
+        $payment_entity->getRemoteState(),          // data string to encode
         -4,                             // bar height (use absolute or negative value as multiplication factor)
         -4,                             // bar width (use absolute or negative value as multiplication factor)
         'black',                        // foreground color

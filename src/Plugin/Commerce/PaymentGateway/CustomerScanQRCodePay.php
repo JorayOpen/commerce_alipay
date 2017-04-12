@@ -178,7 +178,25 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
           \Drupal::logger('commerce_alipay')->notice(print_r($data, TRUE));
         }
 
-        $this->createPayment($data);
+        // load the payment
+        /** @var \Drupal\Core\Entity\Query\QueryInterface $query */
+        $query= \Drupal::entityQuery('commerce_payment')
+          ->condition('order_id', $data['out_trade_no'])
+          ->addTag('commerce_alipay:check_payment');
+        $payment_id = $query->execute();
+        if ($payment_id) {
+          /** @var \Drupal\commerce_payment\Entity\Payment $payment_entity */
+          $payment_entity = Payment::load(array_values($payment_id)[0]);
+          if ($payment_entity) {
+            $payment_entity->state = 'capture_completed';
+            $payment_entity->setRemoteId($data['trade_no']);
+            $payment_entity->setCapturedTime(REQUEST_TIME);
+            $payment_entity->save();
+          } else {
+            // Payment doesn't exist
+            \Drupal::logger('commerce_alipay')->error(print_r($data, TRUE));
+          }
+        }
 
         die('success'); //The response should be 'success' only
       } else {
@@ -210,9 +228,9 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
       'state' => $state,
       'amount' => $price? $price : new Price(strval($result['total_amount']), 'CNY'),
       'payment_gateway' => $this->entityId,
-      'order_id' => $result['out_trade_no']? $result['out_trade_no'] : $order_id,
+      'order_id' => $order_id? $order_id : $result['out_trade_no'],
       'test' => $this->getMode() == 'test',
-      'remote_id' => $result['trade_no'],
+      'remote_id' => array_key_exists('trade_no', $result)? $result['trade_no'] : NULL,
       'remote_state' => $remote_state,
       'authorized' => REQUEST_TIME
     ]);
@@ -225,7 +243,7 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
    *
    * @param string $order_id order id
    * @param \Drupal\commerce_price\Price $total_amount
-   * @return mixed|string
+   * @return \Drupal\commerce_payment\Entity\Payment
    */
   public function requestQRCode($order_id, Price $total_amount) {
     if (!$this->gateway_lib) {
@@ -241,8 +259,7 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
     if ($payment_id) {
       /** @var \Drupal\commerce_payment\Entity\Payment $payment_entity */
       $payment_entity = Payment::load(array_values($payment_id)[0]);
-      // QRCode is stored in the remote state field
-      return $payment_entity->getRemoteState();
+      return $payment_entity;
     }
 
     /** @var \Omnipay\Alipay\AopF2FGateway $gateway */
@@ -264,8 +281,9 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
         // Create a payment entity
         $data = $response->getData();
         // Store QRCode in the remote state field
-        $this->createPayment($data, 'capture_completed', $order_id, $response->getQrCode(), $total_amount);
-        return $response->getQrCode();
+        /** @var \Drupal\commerce_payment\Entity\Payment $payment_entity */
+        $payment_entity = $this->createPayment($data, 'authorization', $order_id, $response->getQrCode(), $total_amount);
+        return $payment_entity;
 
       } else {
         throw new BadRequestHttpException($response->getAlipayResponse('sub_code') . ' ' .$response->getAlipayResponse('sub_msg'));

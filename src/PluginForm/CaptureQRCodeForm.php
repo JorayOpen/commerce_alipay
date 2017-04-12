@@ -34,7 +34,7 @@ class CaptureQRCodeForm extends PaymentOffsiteForm {
     $payment_gateway_plugin = $payment->getPaymentGateway()->getPlugin();
 
     try {
-      $payment_gateway_plugin->capture((string) $payment->getOrderId(), $values['barcode'], (float) $payment->getAmount()->getNumber());
+      $payment_gateway_plugin->capture((string) $payment->getOrderId(), $values['barcode'], $payment->getAmount());
 
     } catch (\Exception $e) {
        // Payment is not successful

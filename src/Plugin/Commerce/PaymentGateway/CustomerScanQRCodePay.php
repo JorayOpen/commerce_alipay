@@ -219,17 +219,19 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
       'remote_state' => $remote_state,
       'authorized' => REQUEST_TIME
     ]);
+    $payment->temp = $result; // Attach the response from Alipay to the after-save payment entity, so any hook_entity_presave can access the response data
     $payment->save();
+
     return $payment;
   }
 
   /**
    *
    * @param string $order_id order id
-   * @param float $total_amout total amount. Unit is Chinese Yuan.
+   * @param Price $total_amout total amount. Currency code is Chinese Yuan.
    * @return mixed|string
    */
-  public function requestQRCode($order_id, $total_amount) {
+  public function requestQRCode($order_id, Price $total_amount) {
     if (!$this->gateway_lib) {
       $this->loadGatewayConfig();
     }
@@ -238,11 +240,10 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
     $gateway->setNotifyUrl($this->getNotifyUrl()->toString());
 
     $request = $gateway->purchase();
-    /** @var \Drupal\commerce_price\Price $price */
     $request->setBizContent([
       'subject'      => \Drupal::config('system.site')->get('name') . t(' Order: ') . $order_id,
       'out_trade_no' => $order_id,
-      'total_amount' => $total_amount
+      'total_amount' => (float) $total_amount->getNumber()
     ]);
 
     try {
@@ -264,10 +265,10 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
   /**
    * @param string $order_id
    * @param string $auth_code
-   * @param float $total_amount
+   * @param Price $total_amount
    * @return \Drupal\Core\Entity\EntityInterface
    */
-  public function capture($order_id, $auth_code, $total_amount) {
+  public function capture($order_id, $auth_code, Price $total_amount) {
     if (!$this->gateway_lib) {
       $this->loadGatewayConfig();
     }
@@ -281,7 +282,7 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
       'scene'        => 'bar_code',
       'auth_code'    => $auth_code,  //购买者手机上的付款二维码
       'subject'      => \Drupal::config('system.site')->get('name') . t(' Order: ') . $order_id,
-      'total_amount' => (float) $total_amount,
+      'total_amount' => (float) $total_amount->getNumber(),
     ]);
 
     try {

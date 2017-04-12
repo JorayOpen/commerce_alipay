@@ -27,7 +27,7 @@ class QRCodePaymentForm extends BasePaymentOffsiteForm {
     $price = $payment->getAmount();
 
     try {
-      $result = $payment_gateway_plugin->requestQRCode($order->id(), (float) $price->getNumber());
+      $result = $payment_gateway_plugin->requestQRCode($order->id(), $price);
 
       $barcode = new Barcode();
       // generate a barcode

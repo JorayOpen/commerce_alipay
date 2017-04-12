@@ -2,6 +2,7 @@
 
 namespace Drupal\commerce_alipay\Plugin\Commerce\PaymentGateway;
 
+use Drupal\commerce_payment\Entity\Payment;
 use Drupal\commerce_payment\Entity\PaymentInterface;
 use Drupal\commerce_payment\Plugin\Commerce\PaymentGateway\OffsitePaymentGatewayBase;
 use Drupal\commerce_payment\Plugin\Commerce\PaymentGateway\SupportsRefundsInterface;
@@ -196,30 +197,25 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
    * Create a Commerce Payment from a WeChat request successful result
    * @param  array $result
    * @param  string $state
-   * @param  OrderInterface $order
+   * @param  string $order_id
    * @param  string $remote_state
+   * @param \Drupal\commerce_price\Price|null $price
    * @return \Drupal\commerce_payment\Entity\PaymentInterface $payment
    */
-  public function createPayment(array $result, $state = 'capture_completed', OrderInterface $order = NULL, $remote_state = NULL) {
+  public function createPayment(array $result, $state = 'capture_completed', $order_id = NULL, $remote_state = NULL, Price $price = NULL) {
     /** @var \Drupal\commerce_payment\Plugin\Commerce\PaymentGateway\OffsitePaymentGatewayInterface $payment_gateway_plugin */
     $payment_storage = $this->entityTypeManager->getStorage('commerce_payment');
 
-    if (!$order) {
-      $price = new Price(strval($result['total_amount']), 'CNY');
-    } else {
-      $price = $order->getTotalPrice();
-    }
     $payment = $payment_storage->create([
       'state' => $state,
-      'amount' => $price,
+      'amount' => $price? $price : new Price(strval($result['total_amount']), 'CNY'),
       'payment_gateway' => $this->entityId,
-      'order_id' => $result['out_trade_no']? $result['out_trade_no'] : $order->id(),
+      'order_id' => $result['out_trade_no']? $result['out_trade_no'] : $order_id,
       'test' => $this->getMode() == 'test',
       'remote_id' => $result['trade_no'],
       'remote_state' => $remote_state,
       'authorized' => REQUEST_TIME
     ]);
-    $payment->temp = $result; // Attach the response from Alipay to the after-save payment entity, so any hook_entity_presave can access the response data
     $payment->save();
 
     return $payment;
@@ -228,13 +224,27 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
   /**
    *
    * @param string $order_id order id
-   * @param Price $total_amout total amount. Currency code is Chinese Yuan.
+   * @param \Drupal\commerce_price\Price $total_amount
    * @return mixed|string
    */
   public function requestQRCode($order_id, Price $total_amount) {
     if (!$this->gateway_lib) {
       $this->loadGatewayConfig();
     }
+
+    // Check if the $order_id has already requested a QRCode, then would have created a payment already
+    /** @var \Drupal\Core\Entity\Query\QueryInterface $query */
+    $query= \Drupal::entityQuery('commerce_payment')
+      ->condition('order_id', $order_id)
+      ->addTag('commerce_alipay:check_payment');
+    $payment_id = $query->execute();
+    if ($payment_id) {
+      /** @var \Drupal\commerce_payment\Entity\Payment $payment_entity */
+      $payment_entity = Payment::load(array_values($payment_id)[0]);
+      // QRCode is stored in the remote state field
+      return $payment_entity->getRemoteState();
+    }
+
     /** @var \Omnipay\Alipay\AopF2FGateway $gateway */
     $gateway = $this->gateway_lib;
     $gateway->setNotifyUrl($this->getNotifyUrl()->toString());
@@ -251,7 +261,12 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
       $response = $request->send();
 
       if ($response->getAlipayResponse('code') == '10000') {  // Success
+        // Create a payment entity
+        $data = $response->getData();
+        // Store QRCode in the remote state field
+        $this->createPayment($data, 'capture_completed', $order_id, $response->getQrCode(), $total_amount);
         return $response->getQrCode();
+
       } else {
         throw new BadRequestHttpException($response->getAlipayResponse('sub_code') . ' ' .$response->getAlipayResponse('sub_msg'));
       }

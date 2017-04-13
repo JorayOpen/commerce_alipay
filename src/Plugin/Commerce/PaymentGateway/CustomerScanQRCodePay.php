@@ -264,7 +264,13 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
 
     /** @var \Omnipay\Alipay\AopF2FGateway $gateway */
     $gateway = $this->gateway_lib;
-    $gateway->setNotifyUrl($this->getNotifyUrl()->toString());
+    /*
+     * We can't use the below more elegant way to get notify_url, because of this major core bug
+     * https://www.drupal.org/node/2744715
+     * $gateway->setNotifyUrl($this->getNotifyUrl()->toString());
+     */
+    global $base_url;
+    $gateway->setNotifyUrl($base_url . '/payment/notify/' . $this->entityId);
 
     $request = $gateway->purchase();
     $request->setBizContent([

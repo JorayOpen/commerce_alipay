@@ -207,6 +207,7 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
     } catch (\Exception $e) {
       // Payment is not successful
       \Drupal::logger('commerce_alipay')->error($e->getMessage());
+      \Drupal::logger('commerce_alipay')->error(file_get_contents('php://input'));
       die('fail');
     }
   }
@@ -243,9 +244,10 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
    *
    * @param string $order_id order id
    * @param \Drupal\commerce_price\Price $total_amount
+   * @param string $notify_url
    * @return \Drupal\commerce_payment\Entity\Payment
    */
-  public function requestQRCode($order_id, Price $total_amount) {
+  public function requestQRCode($order_id, Price $total_amount, $notify_url = NULL) {
     if (!$this->gateway_lib) {
       $this->loadGatewayConfig();
     }
@@ -269,8 +271,11 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
      * https://www.drupal.org/node/2744715
      * $gateway->setNotifyUrl($this->getNotifyUrl()->toString());
      */
-    global $base_url;
-    $gateway->setNotifyUrl($base_url . '/payment/notify/' . $this->entityId);
+    if (!$notify_url) {
+      global $base_url;
+      $notify_url = $base_url . '/payment/notify/' . $this->entityId;
+    }
+    $gateway->setNotifyUrl($notify_url);
 
     $request = $gateway->purchase();
     $request->setBizContent([

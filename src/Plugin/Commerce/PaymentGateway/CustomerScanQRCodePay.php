@@ -233,7 +233,7 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
       'test' => $this->getMode() == 'test',
       'remote_id' => array_key_exists('trade_no', $result)? $result['trade_no'] : NULL,
       'remote_state' => $remote_state,
-      'authorized' => REQUEST_TIME
+      'authorized' => \Drupal::time()->getRequestTime()
     ]);
     $payment->save();
 

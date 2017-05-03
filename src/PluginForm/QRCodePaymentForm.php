@@ -52,7 +52,7 @@ class QRCodePaymentForm extends BasePaymentOffsiteForm {
 
     } catch (\Exception $e) {
       $form['commerce_message'] = [
-        '#markup' => '<div class="checkout-help">' . t('Alipay QR-Code is not avaiable at the moment. Message from Alipay service: ' . $e->getMessage()),
+        '#markup' => '<div class="checkout-help">' . t('Alipay QR-Code is not available at the moment. Message from Alipay service: ' . $e->getMessage()),
         '#weight' => -10,
       ];
     }

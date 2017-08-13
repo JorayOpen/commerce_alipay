@@ -90,16 +90,11 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
    * {@inheritdoc}
    */
   public function refundPayment(PaymentInterface $payment, Price $amount = NULL) {
-    if (!in_array($payment->getState()->value, ['capture_completed', 'capture_partially_refunded'])) {
-      throw new \InvalidArgumentException(t('Only payments in the "capture_completed" and "capture_partially_refunded" states can be refunded.'));
-    }
+    $this->assertPaymentState($payment, ['completed', 'partially_refunded']);
     // If not specified, refund the entire amount.
     $amount = $amount ?: $payment->getAmount();
     // Validate the requested amount.
-    $balance = $payment->getBalance();
-    if ($amount->greaterThan($balance)) {
-      throw new InvalidRequestException(sprintf("Can't refund more than %s.", $balance->__toString()));
-    }
+    $this->assertRefundAmount($payment, $amount);
 
     if (!$this->gateway_lib) {
       $this->loadGatewayConfig();
@@ -130,10 +125,10 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
         $old_refunded_amount = $payment->getRefundedAmount();
         $new_refunded_amount = $old_refunded_amount->add($amount);
         if ($new_refunded_amount->lessThan($payment->getAmount())) {
-          $payment->state = 'capture_partially_refunded';
+          $payment->setState('partially_refunded');
         }
         else {
-          $payment->state = 'capture_refunded';
+          $payment->setState('refunded');
         }
 
         $payment->setRefundedAmount($new_refunded_amount);
@@ -188,9 +183,8 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
           /** @var \Drupal\commerce_payment\Entity\Payment $payment_entity */
           $payment_entity = Payment::load(array_values($payment_id)[0]);
           if ($payment_entity) {
-            $payment_entity->state = 'capture_completed';
+            $payment_entity->state = 'completed';
             $payment_entity->setRemoteId($data['trade_no']);
-            $payment_entity->setCapturedTime(REQUEST_TIME);
             $payment_entity->save();
           } else {
             // Payment doesn't exist
@@ -221,7 +215,7 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
    * @param \Drupal\commerce_price\Price|null $price
    * @return \Drupal\commerce_payment\Entity\PaymentInterface $payment
    */
-  public function createPayment(array $result, $state = 'capture_completed', $order_id = NULL, $remote_state = NULL, Price $price = NULL) {
+  public function createPayment(array $result, $state = 'completed', $order_id = NULL, $remote_state = NULL, Price $price = NULL) {
     /** @var \Drupal\commerce_payment\Plugin\Commerce\PaymentGateway\OffsitePaymentGatewayInterface $payment_gateway_plugin */
     $payment_storage = $this->entityTypeManager->getStorage('commerce_payment');
 

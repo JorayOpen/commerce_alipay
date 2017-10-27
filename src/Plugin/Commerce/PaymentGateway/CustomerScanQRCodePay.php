@@ -239,9 +239,10 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
    * @param string $order_id order id
    * @param \Drupal\commerce_price\Price $total_amount
    * @param string $notify_url
+   * @param string $store_id
    * @return \Drupal\commerce_payment\Entity\Payment
    */
-  public function requestQRCode($order_id, Price $total_amount, $notify_url = NULL) {
+  public function requestQRCode($order_id, Price $total_amount, $notify_url = NULL, $store_id = '') {
     if (!$this->gateway_lib) {
       $this->loadGatewayConfig();
     }
@@ -275,6 +276,7 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
     $request->setBizContent([
       'subject'      => \Drupal::config('system.site')->get('name') . t(' Order: ') . $order_id,
       'out_trade_no' => $order_id,
+      'store_id'     => $store_id,
       'total_amount' => (float) $total_amount->getNumber()
     ]);
 
@@ -304,9 +306,10 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
    * @param string $order_id
    * @param string $auth_code
    * @param Price $total_amount
+   * @param string $store_id
    * @return \Drupal\Core\Entity\EntityInterface
    */
-  public function capture($order_id, $auth_code, Price $total_amount) {
+  public function capture($order_id, $auth_code, Price $total_amount, $store_id = '') {
     if (!$this->gateway_lib) {
       $this->loadGatewayConfig();
     }
@@ -318,6 +321,7 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
     $request->setBizContent([
       'out_trade_no' => (string) $order_id,
       'scene'        => 'bar_code',
+      'store_id'     => $store_id,
       'auth_code'    => $auth_code,  //购买者手机上的付款二维码
       'subject'      => \Drupal::config('system.site')->get('name') . t(' Order: ') . $order_id,
       'total_amount' => (float) $total_amount->getNumber(),

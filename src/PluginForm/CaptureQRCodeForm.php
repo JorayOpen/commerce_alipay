@@ -33,8 +33,12 @@ class CaptureQRCodeForm extends PaymentOffsiteForm {
     /** @var \Drupal\commerce_payment\Plugin\Commerce\PaymentGateway\OffsitePaymentGatewayInterface $payment_gateway_plugin */
     $payment_gateway_plugin = $payment->getPaymentGateway()->getPlugin();
 
+    $order    = $payment->getOrder();
+    $price    = $payment->getAmount();
+    $store_id = $order->getStoreId();
+
     try {
-      $payment_gateway_plugin->capture((string) $payment->getOrderId(), $values['barcode'], $payment->getAmount());
+      $payment_gateway_plugin->capture((string) $order->id(), $values['barcode'], $price, $store_id);
 
     } catch (\Exception $e) {
        // Payment is not successful

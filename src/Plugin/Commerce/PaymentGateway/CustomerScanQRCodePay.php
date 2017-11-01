@@ -388,4 +388,58 @@ class CustomerScanQRCodePay extends OffsitePaymentGatewayBase implements Support
     $this->gateway_lib = $gateway;
   }
 
+  /**
+   * @param $payment_id
+   * @param $order_id
+   *
+   * @return \Drupal\commerce_payment\Entity\Payment|\Drupal\Core\Entity\EntityInterface|null|static
+   */
+  public function cancel($payment_id, $order_id){
+    if (!$this->gateway_lib) {
+      $this->loadGatewayConfig();
+    }
+    /** @var \Omnipay\Alipay\AopF2FGateway $gateway */
+    $gateway = $this->gateway_lib;
+
+    $payment_entity=payment::load($payment_id);
+    if ($payment_entity) {
+      /** @var \Omnipay\Alipay\Requests\AopTradePayRequest $request */
+      $request = $gateway->cancel();
+      $request->setBizContent([
+        'out_trade_no' => $order_id,
+      ]);
+
+      try {
+        $response = $request->send();
+        $data = $response->getData();
+        //cancel successful, then changed the order payment status
+        if ($data['alipay_trade_cancel_response']['code'] == 10000) {
+          \Drupal::logger('commerce_alipay')->info(print_r($data, TRUE));
+          //have not scanned the QRCode then cancel the order, the returned message has no action and trade_no
+          if (isset($data['alipay_trade_cancel_response']['action'])) {
+            $state = $data['alipay_trade_cancel_response']['action'] == 'close' ? 'authorization_voided' : 'refunded';
+          } else {
+            $state = 'authorization_voided';
+          }
+          if (isset($data['alipay_trade_cancel_response']['trade_no'])) {
+            $remote_id = $data['alipay_trade_cancel_response']['trade_no'];
+            $payment_entity->setRemoteId($remote_id);
+          }
+          $payment_entity->setState($state);
+          $payment_entity->save();
+          return $payment_entity;
+        } else {
+          \Drupal::logger('commerce_alipay')->error(print_r($data, TRUE));
+        }
+      } catch (\Exception $e) {
+        // Cancel is not successful
+        \Drupal::logger('commerce_alipay')->error($e->getMessage());
+        throw new BadRequestHttpException($e->getMessage());
+      }
+    } else {
+      \Drupal::logger('commerce_alipay')->error('payment_id:'.$payment_id.'not exist!');
+      return NULL;
+    }
+  }
+
 }

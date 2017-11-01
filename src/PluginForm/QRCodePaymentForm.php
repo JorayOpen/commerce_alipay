@@ -3,14 +3,17 @@
 namespace Drupal\commerce_alipay\PluginForm;
 
 use Drupal\commerce_payment\PluginForm\PaymentOffsiteForm as BasePaymentOffsiteForm;
+use Drupal\commerce_payment\Entity\Payment;
 use Drupal\Core\Form\FormStateInterface;
 use Com\Tecnick\Barcode\Barcode;
 use Drupal\Core\Render\Markup;
+use Drupal\Core\StringTranslation\StringTranslationTrait;
 
 /**
  * @link https://github.com/lokielse/omnipay-alipay/wiki/Aop-Face-To-Face-Gateway
  */
 class QRCodePaymentForm extends BasePaymentOffsiteForm {
+  use StringTranslationTrait;
 
   /**
    * {@inheritdoc}
@@ -51,6 +54,16 @@ class QRCodePaymentForm extends BasePaymentOffsiteForm {
         '#markup' => Markup::create($bobj->getHtmlDiv()),
       ];
 
+      $form['payment_id'] = [
+        '#type' => 'value',
+        '#value' => $payment_entity->id(),
+      ];
+
+      $form['cancel'] = [
+        '#type' => 'button',
+        '#value' => $this->t('Cancel'),
+      ];
+
     } catch (\Exception $e) {
       $form['commerce_message'] = [
         '#markup' => '<div class="checkout-help">' . t('Alipay QR-Code is not available at the moment. Message from Alipay service: ' . $e->getMessage()),
@@ -61,4 +74,23 @@ class QRCodePaymentForm extends BasePaymentOffsiteForm {
     return $form;
   }
 
+  /**
+   * {@inheritdoc}
+   */
+  public function validateConfigurationForm(array &$form, FormStateInterface $form_state) {
+
+    /** @var \Drupal\commerce_payment\Entity\PaymentInterface $payment */
+    $payment = $this->entity;
+    /** @var \Drupal\commerce_payment\Plugin\Commerce\PaymentGateway\OffsitePaymentGatewayInterface $payment_gateway_plugin */
+    $payment_gateway_plugin = $payment->getPaymentGateway()->getPlugin();
+
+    $form_state_values = $form_state->getValues();
+    $payment_id = $form_state_values['payment_process']['offsite_payment']['payment_id'];
+    $payment_entity = Payment::load($payment_id);
+    $order_id = $payment_entity->getOrderId();
+
+    if($form_state_values['op']->getUntranslatedString() == 'Cancel'){
+      $payment_gateway_plugin->cancel($payment_id, $order_id);
+    }
+  }
 }

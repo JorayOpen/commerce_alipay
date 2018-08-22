@@ -5,7 +5,7 @@
     "homepage": "http://drupal.org/project/commerce_alipay",
     "license": "GPL-2.0+",
     "require": {
-        "lokielse/omnipay-alipay": "^2.0",
+        "lokielse/omnipay-alipay": "^3.0",
         "tecnickcom/tc-lib-barcode": "^1.15"
 
     },

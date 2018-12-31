@@ -11,9 +11,9 @@
 function commerce_alipay_requirements($phase) {
   $requirements = [];
   if ($phase == 'install') {
-    if (!class_exists('\Omnipay\Omnipay')) {
+    if (!class_exists('\php-cpm\omnipay-alipay')) {
       $requirements['commerce_alipay_library'] = [
-        'description' => t('Commerce Alipay requires the Omnipay\Omnipay library.'),
+        'description' => t('Commerce Alipay requires the php-cpm/omnipay-alipay library.'),
         'severity' => REQUIREMENT_ERROR,
       ];
     }

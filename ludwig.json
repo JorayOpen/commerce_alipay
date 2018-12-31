@@ -1,12 +1,12 @@
 {
   "require": {
     "lokielse/omnipay-alipay": {
-      "version": "2.3.4",
-      "url": "https://github.com/lokielse/omnipay-alipay/archive/v2.3.4.zip"
+      "version": "3.0.3",
+      "url": "https://github.com/lokielse/omnipay-alipay/archive/v3.0.3.zip"
     },
     "omnipay/common": {
-      "version": "2.5.2",
-      "url": "https://github.com/thephpleague/omnipay-common/archive/2.5.2.zip"
+      "version": "3.0.2",
+      "url": "https://github.com/thephpleague/omnipay-common/archive/3.0.2.zip"
     },
     "tecnickcom/tc-lib-barcode": {
       "version": "1.15.6",
